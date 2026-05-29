@@ -130,7 +130,8 @@ describe("formatPaneHeader (FR-7)", () => {
 describe("formatBreadcrumb (FR-3)", () => {
   it("main vs subagent", () => {
     expect(formatBreadcrumb("main", 0, true)).toBe("▸ main(0)");
-    expect(formatBreadcrumb("Explore", 2, false)).toBe("▸ Explore (2)");
+    // Subagent breadcrumb carries the always-visible way-back hint (Esc / 0 → main).
+    expect(formatBreadcrumb("Explore", 2, false)).toBe("▸ Explore (2) · Esc or 0 → main");
   });
 });
 
