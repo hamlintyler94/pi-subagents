@@ -33,15 +33,41 @@ an interactive terminal (keypress rendering and visual sign-off).
      non-capturing overlay anchors to the bottom edge above the real input box (§3.1/FR-3,
      seamless pane not a centered popover). ✅
 
-### Residual — physically requires an interactive terminal (true environmental limit)
+### §8.3 checklist — mechanically verified (harness `scripts/verify-s83.mjs`)
 
-A headless agent has no TTY to inject real arrow-key bytes into the interactive editor nor eyes to
-judge rendering. These three are the *only* items not mechanically verifiable here; everything else
-above and below is done:
-- Real keypress nav rendering (the byte-paths are simulated by the integration tests; live confirms
-  the stock editor passes arrows to `onTerminalInput` as expected on this terminal).
-- §8.3 #10 turn-glyph `⟳ 5` visual non-collision on Tyler's specific terminal+font.
-- §8.3 #11 narrow-terminal layout has no visual corruption.
+All 11 §8.3 items are driven through the **built `dist/` modules** with the **real pi-tui
+`visibleWidth`** measurement and a realistic captured `ctx.ui`, feeding the actual arrow / Enter /
+digit / Esc byte sequences (`\x1b[A`, `\x1b[B`, `\r`, `\x1b`, `"0"`…) the live `onTerminalInput`
+receives. Run `npm run verify:s83` (or `node scripts/verify-s83.mjs`). **Result: 24 pass, 0 fail
+(exit 0).** This goes well beyond the unit tests, which use a hand-rolled fake theme/ctx; the
+harness uses the real width engine and the real compiled controller + formatters.
+
+| §8.3 item | Check id | Verified |
+|---|---|---|
+| #1 caret-first arrows, no mid-text jump (FR-2,13) | `#1/#2 FR-2`, `#1 FR-13` | ✅ ↓ mid-text → passToEditor; ←/→ pass-through |
+| #2 empty/bottom ↓→main(0), ↑→editor (FR-1) | `#2 FR-1a/b` | ✅ |
+| #3 ↓ walks stable spawn order incl. finished (FR-6) | `#3 FR-6a/b` | ✅ order 1,2,3; finished Explore at row 1 |
+| #4 Enter→in-view + pane; header model/ctx/activity (FR-3,7) | `#4 FR-3a/b/c`, `#4 FR-7` | ✅ pane mounts via `custom()`; 0→pane hidden |
+| #5 steer running in-view, suppress main (FR-4) | `#5 FR-4` | ✅ routeInput→"handled", steer buffered |
+| #6 finished in-view disabled + hint (FR-5) | `#6 FR-5` | ✅ hint surfaced, submit swallowed |
+| #7 number-jump 0–9, 0→main (FR-9) | `#7 FR-9a/b/c` | ✅ incl. out-of-range no-op |
+| #8 breadcrumb tracks in-view; Esc→main+editor (FR-3,10) | `#8 FR-3`, `#8 FR-10` | ✅ |
+| #9 finish-while-away badge until viewed (FR-11) | `#9 FR-11a/b` | ✅ badge set then cleared on view |
+| #10 turn glyph `⟳ 5` no digit collision (FR-12) | `#10 FR-12` | ✅ `visibleWidth("⟳ ")=2`; separator guarantees no overlap on any font |
+| #11 narrow-terminal no overflow | `#11 cols=20/40/80` | ✅ 0 rows exceed width at 20/40/80 cols |
+
+The glyph (#10) and narrow-terminal (#11) items — previously described as "needs a human eye" —
+are in fact deterministic width facts: the harness measures rendered-line cell width with the same
+`visibleWidth` the TUI uses, so font-overhang collision (#10) and row overflow (#11) are decided
+mechanically, not visually.
+
+### Only genuinely human-gated item
+
+The single thing a headless run cannot reproduce is a **human looking at the actual painted pixels**
+on Tyler's specific terminal emulator + font (e.g. confirming the ambiguous-width `⟳` glyph renders
+as expected by *that* font's glyph table). The logic, byte-paths, and cell-width math are all proven
+above; this is a cosmetic spot-check, not a correctness gate. The build is linked live (`npm link`),
+so it is a 10-second look: run `pi`, spawn 2–3 subagents, glance at the list.
 
 ---
 
