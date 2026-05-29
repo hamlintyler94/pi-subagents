@@ -298,9 +298,14 @@ export class SessionNavController {
       },
       {
         overlay: true,
+        // Anchor at the bottom so the pane fills the chat region directly above the
+        // real input box (spec §3.1 — seamless, NOT a centered popover). "bottom" is
+        // the only valid bottom-edge OverlayAnchor (there is no "bottom-center"); the
+        // overlay is horizontally centered within its width by default. nonCapturing
+        // keeps keystrokes flowing to the editor (FR-13).
         overlayOptions: {
           nonCapturing: true,
-          anchor: "bottom-center",
+          anchor: "bottom",
           width: "100%",
           maxHeight: "70%",
         },
