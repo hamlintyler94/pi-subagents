@@ -265,15 +265,25 @@ export class TranscriptPane implements Component {
       th,
     );
 
-    const lines: string[] = [];
-    lines.push(truncateToWidth(header, width));
-    lines.push(th.fg("dim", "─".repeat(Math.min(width, innerW))));
+    // The pane is an overlay composited OVER the live chat. pi-tui only paints the
+    // columns each overlay line actually contains, so a short or empty line lets the
+    // underlying main-session chat show through. To make the pane fully OPAQUE we
+    // render exactly `rows` lines, each space-padded to the full width — so every cell
+    // of the chat region is covered and main's transcript can never bleed through.
+    const rows = Math.max(3, Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100) - 2);
+    const opaque = (s: string) => truncateToWidth(s, width, "…", true); // pad=true → fill to width
 
-    // Body: render the tail of the transcript that fits the available chat area.
-    const maxRows = Math.max(3, Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100) - 2);
+    const lines: string[] = [];
+    lines.push(opaque(header));
+    lines.push(opaque(th.fg("dim", "─".repeat(Math.min(width, innerW)))));
+
+    // Body: the tail of the transcript that fits the remaining rows.
+    const bodyRows = Math.max(0, rows - lines.length);
     const content = buildTranscriptLines(this.session, this.record, this.activity, th, innerW);
-    const visible = content.slice(Math.max(0, content.length - maxRows));
-    for (const l of visible) lines.push(" " + l);
+    const visible = content.slice(Math.max(0, content.length - bodyRows));
+    for (const l of visible) lines.push(opaque(" " + l));
+    // Pad the unused rows with opaque blank lines so the whole region stays covered.
+    while (lines.length < rows) lines.push(" ".repeat(width));
     return lines;
   }
 

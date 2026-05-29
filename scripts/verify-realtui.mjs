@@ -20,7 +20,7 @@
  *
  * Run: node scripts/verify-realtui.mjs   (exit code = fail count; 0 = all pass)
  */
-import { Container, Text, TUI } from "@earendil-works/pi-tui";
+import { Container, Text, TUI, visibleWidth } from "@earendil-works/pi-tui";
 import { SessionNavController } from "../dist/ui/session-nav-controller.js";
 
 const results = [];
@@ -155,6 +155,33 @@ function harness(recs) {
   const w = (ctx._lastWidget ?? []).join("\n");
   check("REAL-4 widget-renders", /\(editor\)/.test(w) && /main\(0\)/.test(w) && /\(1\)/.test(w),
     `belowEditor widget rendered editor-cursor + main(0) + subagent row (lines=${(ctx._lastWidget ?? []).length})`);
+}
+
+// ================================================================================
+// REAL-5 — the transcript pane is OPAQUE + height-filling so the main-session chat
+// cannot bleed through (the live bug: short pane left main's content visible).
+// ================================================================================
+{
+  const fakeSession = { subscribe: () => () => {}, messages: [{ role: "user", content: "find md files" }], getMessages: () => [], steer: async () => {} };
+  const term = new FakeTerminal(100, 30);
+  const tui = new TUI(term, false); tui.start();
+  const width = 100;
+  // Build the pane via the real factory path (controller custom()).
+  let pane;
+  const ctx = {
+    setStatus() {}, setWidget() {}, onTerminalInput(h) { return tui.addInputListener(h); },
+    getEditorText: () => "", setEditorText() {},
+    custom(factory) { pane = factory(tui, theme, {}, () => {}); return new Promise(() => {}); },
+  };
+  const ctrl = new SessionNavController(makeManager([rec("b", "Plan", "running", 1100, { session: fakeSession })]), new Map(), () => undefined);
+  ctrl.setUICtx(ctx);
+  term.type(KEY.down); term.type(KEY.down); term.type(KEY.enter); // view Plan → builds pane
+  const out = pane?.render(width) ?? [];
+  const expectedRows = Math.max(3, Math.floor((30 * 70) / 100) - 2); // mirrors VIEWPORT_HEIGHT_PCT math
+  const allFullWidth = out.length > 0 && out.every((l) => visibleWidth(l) === width);
+  check("REAL-5 pane-opaque-fullheight",
+    out.length === expectedRows && allFullWidth,
+    `pane rendered ${out.length} rows (expected ${expectedRows}), every line padded to width ${width}=${allFullWidth} (sparse transcript must NOT leave gaps)`);
 }
 
 // ---- Report --------------------------------------------------------------------
