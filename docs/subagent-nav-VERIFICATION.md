@@ -4,8 +4,50 @@
 **Spec:** `C:\users\thamlin\.pi\agent\docs\plans\subagent-nav-tui.md`
 **Runtime target:** `@earendil-works/pi-coding-agent@0.75.5` (peer deps already match)
 
-This report records the automated verification that was completed headlessly, and the
-two steps that require a human at an interactive terminal (live link + §8.3 keyboard checklist).
+This report records the automated verification completed headlessly, the **live-Pi link and
+load verification that WAS performed**, a real bug that live verification caught and fixed, and
+the residual items that physically require a human at an interactive terminal (keypress rendering
+and visual sign-off).
+
+---
+
+## Live-Pi verification PERFORMED (not deferred)
+
+1. **Linked the dev build into live Pi** — `npm link` from `C:\Users\thamlin\dev\pi-subagents`.
+   Verified the global package is now a symlink to the clone:
+   `C:\Users\thamlin\AppData\Roaming\npm\node_modules\@tintinweb\pi-subagents -> /c/Users/thamlin/dev/pi-subagents`.
+   Reversible: `npm i -g @tintinweb/pi-subagents` restores the published version.
+2. **Extension loads in live Pi without runtime error** — `pi --offline -p` returned RC=0 and
+   produced the expected reply with **no** extension load error / stack trace. This exercises the
+   real `index.ts` init path: `SessionNavController` instantiation, `pi.on("input")` registration,
+   and `tool_execution_start`/agent-callback wiring — things build+unit tests cannot catch.
+3. **Live-API seam verification against the real `.d.ts`** (runtime `@earendil-works/*@0.75.5`):
+   - `InputEvent = { type:"input"; text:string; images?; source:"interactive"|"rpc"|"extension" }`
+     — matches `index.ts` use of `event.source`/`event.text`. ✅
+   - `InputEventResult` includes `{action:"handled"}` — matches the steer-suppression return. ✅
+   - `ctx.ui.custom<T>(factory, { overlay?, overlayOptions? })` — matches `showPane`. ✅
+   - `OverlayOptions` (pi-tui) carries `nonCapturing`, `anchor`, `width`, `maxHeight`. ✅
+   - `ctx.hasUI: boolean` — matches the interactive-only guard. ✅
+4. **Bug caught & fixed by live verification (3)**: `OverlayAnchor` has **no `"bottom-center"`**
+   (valid: `center|top|bottom|top-left|top-right|bottom-left|bottom-right|left|right`). The pane
+   used `anchor:"bottom-center"`, which the TUI falls back to centered → a *popover*, violating
+   §3.1/FR-3. Fixed to `anchor:"bottom"` so the non-capturing overlay fills the chat region above
+   the real input box. The fake-ctx integration tests ignore `overlayOptions`, so only live-API
+   inspection surfaced it.
+
+### Residual — physically requires an interactive terminal (true environmental limit)
+
+A headless agent has no TTY to inject real arrow-key bytes into the interactive editor nor eyes to
+judge rendering. These three are the *only* items not mechanically verifiable here; everything else
+above and below is done:
+- Real keypress nav rendering (the byte-paths are simulated by the integration tests; live confirms
+  the stock editor passes arrows to `onTerminalInput` as expected on this terminal).
+- §8.3 #10 turn-glyph `⟳ 5` visual non-collision on Tyler's specific terminal+font.
+- §8.3 #11 narrow-terminal layout has no visual corruption.
+
+---
+
+The remaining sections record the automated verification.
 
 ---
 
