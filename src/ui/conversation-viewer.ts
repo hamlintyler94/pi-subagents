@@ -6,12 +6,13 @@
  */
 
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
-import { type Component, matchesKey, type TUI, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { extractText } from "../context.js";
+import { type Component, matchesKey, type TUI, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { AgentRecord } from "../types.js";
 import { getLifetimeTotal, getSessionContextPercent } from "../usage.js";
 import type { Theme } from "./agent-widget.js";
 import { type AgentActivity, buildInvocationTags, describeActivity, formatDuration, formatSessionTokens, getDisplayName, getPromptModeLabel } from "./agent-widget.js";
+import { formatPaneHeader } from "./session-row-format.js";
+import { buildTranscriptLines } from "./transcript-builder.js";
 
 /** Base lines consumed by chrome: top border + header + header sep + footer sep + footer + bottom border. */
 const CHROME_LINES_BASE = 6;
@@ -180,82 +181,107 @@ export class ConversationViewer implements Component {
   }
 
   private buildContentLines(width: number): string[] {
-    if (width <= 0) return [];
+    // Shared builder — single source of truth for transcript rendering (spec §5).
+    return buildTranscriptLines(this.session, this.record, this.activity, this.theme, width);
+  }
+}
 
+/**
+ * TranscriptPane — borderless, non-capturing in-view transcript pane.
+ *
+ * Rendered via `ctx.ui.custom(factory, { nonCapturing: true, overlayOptions:
+ * { placement: "chatArea" } })` so it fills the chat area above the REAL input box
+ * without stealing keystrokes (spec §3.1, S0.1). It shares `buildTranscriptLines`
+ * with the modal viewer and shows the model/ctx/activity pane header (FR-7).
+ *
+ * It is intentionally read-only and has NO key handling — all navigation/steering
+ * is owned by the SessionNavController via onTerminalInput / pi.on("input").
+ */
+export class TranscriptPane implements Component {
+  private unsubscribe: (() => void) | undefined;
+  private closed = false;
+  /** Swapped in by the controller when the in-view session changes. */
+  private session: AgentSession;
+  private record: AgentRecord;
+  private activity: AgentActivity | undefined;
+
+  constructor(
+    private tui: TUI,
+    session: AgentSession,
+    record: AgentRecord,
+    activity: AgentActivity | undefined,
+    private theme: Theme,
+    /** List index of the in-view session (for the header). */
+    private index: number,
+  ) {
+    this.session = session;
+    this.record = record;
+    this.activity = activity;
+    this.subscribe();
+  }
+
+  private subscribe(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = this.session.subscribe(() => {
+      if (this.closed) return;
+      this.tui.requestRender();
+    });
+  }
+
+  /** Point the pane at a different session (used when in-view changes without remount). */
+  setSession(session: AgentSession, record: AgentRecord, activity: AgentActivity | undefined, index: number): void {
+    this.session = session;
+    this.record = record;
+    this.activity = activity;
+    this.index = index;
+    this.subscribe();
+    if (!this.closed) this.tui.requestRender();
+  }
+
+  render(width: number): string[] {
+    if (width < 6 || this.closed) return [];
     const th = this.theme;
-    const messages = this.session.messages;
+    const innerW = width - 2;
+
+    const header = formatPaneHeader(
+      {
+        name: getDisplayName(this.record.type),
+        index: this.index,
+        status: this.record.status,
+        timing: formatDuration(this.record.startedAt, this.record.completedAt),
+        modelName: this.record.invocation?.modelName,
+        // Prefer the live activity session for ctx%, but fall back to the record's
+        // own session so the header still shows context when activity isn't tracked
+        // (e.g. resumed/finished agents viewed read-only).
+        contextPercent: getSessionContextPercent(
+          (this.activity?.session ?? this.session) as Parameters<typeof getSessionContextPercent>[0],
+        ),
+        tokens: getLifetimeTotal(this.activity?.lifetimeUsage ?? this.record.lifetimeUsage),
+        activity:
+          this.record.status === "running" && this.activity
+            ? describeActivity(this.activity.activeTools, this.activity.responseText)
+            : undefined,
+      },
+      th,
+    );
+
     const lines: string[] = [];
+    lines.push(truncateToWidth(header, width));
+    lines.push(th.fg("dim", "─".repeat(Math.min(width, innerW))));
 
-    if (messages.length === 0) {
-      lines.push(th.fg("dim", "(waiting for first message...)"));
-      return lines;
-    }
+    // Body: render the tail of the transcript that fits the available chat area.
+    const maxRows = Math.max(3, Math.floor((this.tui.terminal.rows * VIEWPORT_HEIGHT_PCT) / 100) - 2);
+    const content = buildTranscriptLines(this.session, this.record, this.activity, th, innerW);
+    const visible = content.slice(Math.max(0, content.length - maxRows));
+    for (const l of visible) lines.push(" " + l);
+    return lines;
+  }
 
-    let needsSeparator = false;
-    for (const msg of messages) {
-      if (msg.role === "user") {
-        const text = typeof msg.content === "string"
-          ? msg.content
-          : extractText(msg.content);
-        if (!text.trim()) continue;
-        if (needsSeparator) lines.push(th.fg("dim", "───"));
-        lines.push(th.fg("accent", "[User]"));
-        for (const line of wrapTextWithAnsi(text.trim(), width)) {
-          lines.push(line);
-        }
-      } else if (msg.role === "assistant") {
-        const textParts: string[] = [];
-        const toolCalls: string[] = [];
-        for (const c of msg.content) {
-          if (c.type === "text" && c.text) textParts.push(c.text);
-          else if (c.type === "toolCall") {
-            toolCalls.push((c as any).name ?? (c as any).toolName ?? "unknown");
-          }
-        }
-        if (needsSeparator) lines.push(th.fg("dim", "───"));
-        lines.push(th.bold("[Assistant]"));
-        if (textParts.length > 0) {
-          for (const line of wrapTextWithAnsi(textParts.join("\n").trim(), width)) {
-            lines.push(line);
-          }
-        }
-        for (const name of toolCalls) {
-          lines.push(truncateToWidth(th.fg("muted", `  [Tool: ${name}]`), width));
-        }
-      } else if (msg.role === "toolResult") {
-        const text = extractText(msg.content);
-        const truncated = text.length > 500 ? text.slice(0, 500) + "... (truncated)" : text;
-        if (!truncated.trim()) continue;
-        if (needsSeparator) lines.push(th.fg("dim", "───"));
-        lines.push(th.fg("dim", "[Result]"));
-        for (const line of wrapTextWithAnsi(truncated.trim(), width)) {
-          lines.push(th.fg("dim", line));
-        }
-      } else if ((msg as any).role === "bashExecution") {
-        const bash = msg as any;
-        if (needsSeparator) lines.push(th.fg("dim", "───"));
-        lines.push(truncateToWidth(th.fg("muted", `  $ ${bash.command}`), width));
-        if (bash.output?.trim()) {
-          const out = bash.output.length > 500
-            ? bash.output.slice(0, 500) + "... (truncated)"
-            : bash.output;
-          for (const line of wrapTextWithAnsi(out.trim(), width)) {
-            lines.push(th.fg("dim", line));
-          }
-        }
-      } else {
-        continue;
-      }
-      needsSeparator = true;
-    }
+  invalidate(): void { /* no cached state */ }
 
-    // Streaming indicator for running agents
-    if (this.record.status === "running" && this.activity) {
-      const act = describeActivity(this.activity.activeTools, this.activity.responseText);
-      lines.push("");
-      lines.push(truncateToWidth(th.fg("accent", "▍ ") + th.fg("dim", act), width));
-    }
-
-    return lines.map(l => truncateToWidth(l, width));
+  dispose(): void {
+    this.closed = true;
+    this.unsubscribe?.();
+    this.unsubscribe = undefined;
   }
 }

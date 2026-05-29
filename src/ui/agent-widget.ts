@@ -10,6 +10,8 @@ import type { AgentManager } from "../agent-manager.js";
 import { getConfig } from "../agent-types.js";
 import type { AgentInvocation, SubagentType } from "../types.js";
 import { getLifetimeTotal, getSessionContextPercent, type LifetimeUsage, type SessionLike } from "../usage.js";
+import { formatTurnCount } from "./session-row-format.js";
+import type { Theme as SharedTheme } from "./theme.js";
 
 // ---- Constants ----
 
@@ -35,10 +37,7 @@ const TOOL_DISPLAY: Record<string, string> = {
 
 // ---- Types ----
 
-export type Theme = {
-  fg(color: string, text: string): string;
-  bold(text: string): string;
-};
+export type Theme = SharedTheme;
 
 export type UICtx = {
   setStatus(key: string, text: string | undefined): void;
@@ -126,9 +125,16 @@ export function formatSessionTokens(
   return `${tokenStr} (${annot.join(" · ")})`;
 }
 
-/** Format turn count with optional max limit: "⟳5≤30" or "⟳5". */
+/**
+ * Format turn count with optional max limit.
+ *
+ * FR-12 / §9 glyph fix: a separating space is inserted between the `⟳` glyph
+ * (East-Asian Ambiguous width, overhangs the digit on many fonts) and the number,
+ * yielding "⟳ 5" / "⟳ 5≤30". Delegates to the single source of truth in
+ * session-row-format so every emitter stays consistent.
+ */
 export function formatTurns(turnCount: number, maxTurns?: number | null): string {
-  return maxTurns != null ? `⟳${turnCount}≤${maxTurns}` : `⟳${turnCount}`;
+  return formatTurnCount(turnCount, maxTurns);
 }
 
 /** Format milliseconds as human-readable duration. */

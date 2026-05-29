@@ -376,6 +376,29 @@ export class AgentManager {
     );
   }
 
+  /**
+   * Stable, spawn-ordered list of agents (earliest spawn first), including
+   * finished ones. Returns `{ index, record }` where index is 1-based to match
+   * the session-list numbering (0 is reserved for `main`). Indices are derived
+   * from spawn order (startedAt, id tiebreak) and never reshuffle as agents
+   * finish — the nav UI relies on this for stable number-jump targets (spec §3.4).
+   */
+  orderedAgents(): { index: number; record: AgentRecord }[] {
+    const sorted = [...this.agents.values()].sort(
+      (a, b) => (a.startedAt - b.startedAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
+    return sorted.map((record, i) => ({ index: i + 1, record }));
+  }
+
+  /**
+   * Look up an agent by its stable spawn-ordered index (1-based; see
+   * `orderedAgents`). Returns undefined for index 0 (main) or out-of-range.
+   */
+  getByIndex(index: number): AgentRecord | undefined {
+    if (index < 1) return undefined;
+    return this.orderedAgents().find(e => e.index === index)?.record;
+  }
+
   abort(id: string): boolean {
     const record = this.agents.get(id);
     if (!record) return false;

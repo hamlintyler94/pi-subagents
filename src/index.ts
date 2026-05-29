@@ -45,6 +45,7 @@ import {
   type UICtx,
 } from "./ui/agent-widget.js";
 import { showSchedulesMenu } from "./ui/schedule-menu.js";
+import { type NavUICtx, SessionNavController } from "./ui/session-nav-controller.js";
 import { addUsage, getLifetimeTotal, getSessionContextPercent, type LifetimeUsage } from "./usage.js";
 
 // ---- Shared helpers ----
@@ -410,6 +411,7 @@ export default function (pi: ExtensionAPI) {
     // 'held' → do nothing, group will fire later
     // 'delivered' → group callback already fired
     widget.update();
+    navController.refresh();
   }, undefined, (record) => {
     // Emit started event when agent transitions to running (including from queue)
     pi.events.emit("subagents:started", {
@@ -417,6 +419,8 @@ export default function (pi: ExtensionAPI) {
       type: record.type,
       description: record.description,
     });
+    // Refresh the nav list so a newly-started agent appears immediately.
+    navController.refresh();
   }, (record, info) => {
     // Emit compacted event when agent's session compacts (preserves count on record).
     pi.events.emit("subagents:compacted", {
@@ -498,11 +502,31 @@ export default function (pi: ExtensionAPI) {
     manager.abortAll();
     for (const timer of pendingNudges.values()) clearTimeout(timer);
     pendingNudges.clear();
+    navController.dispose();
     manager.dispose();
   });
 
   // Live widget: show running agents above editor
   const widget = new AgentWidget(manager, agentActivity);
+
+  // Session navigation controller (FR-1…FR-13): vertical session list below the
+  // editor, in-view transcript pane, ↑/↓/Enter/0-9/Esc routing, steer-on-submit,
+  // breadcrumb, attention badges. Owns its own UI surfaces; the legacy AgentWidget
+  // above remains for the aboveEditor running summary + finished notifications.
+  const navController = new SessionNavController(
+    manager,
+    agentActivity,
+    () => (currentCtx as any)?.sessionManager?.session ?? undefined,
+  );
+
+  // Route submit → steer for the in-view running subagent (FR-4/FR-5). Returns
+  // "handled" to suppress the main turn; otherwise lets the main session proceed.
+  pi.on("input", (event) => {
+    if (event.source !== "interactive") return;
+    const decision = navController.routeInput(event.text);
+    if (decision === "handled") return { action: "handled" as const };
+    return;
+  });
 
   // ---- Join mode configuration ----
   let defaultJoinMode: JoinMode = 'smart';
@@ -577,6 +601,10 @@ export default function (pi: ExtensionAPI) {
   pi.on("tool_execution_start", async (_event, ctx) => {
     widget.setUICtx(ctx.ui as UICtx);
     widget.onTurnStart();
+    if (ctx.hasUI) {
+      navController.setUICtx(ctx.ui as unknown as NavUICtx);
+      navController.refresh();
+    }
   });
 
   /** Format an agent's tool scope: "*" when it has all built-ins, else a comma-separated list. */
@@ -845,6 +873,7 @@ Terse command-style prompts produce shallow, generic work.
     execute: async (toolCallId, params, signal, onUpdate, ctx) => {
       // Ensure we have UI context for widget rendering
       widget.setUICtx(ctx.ui as UICtx);
+      if (ctx.hasUI) navController.setUICtx(ctx.ui as unknown as NavUICtx);
 
       // Reload custom agents so new .pi/agents/*.md files are picked up without restart
       reloadCustomAgents();
@@ -1476,6 +1505,12 @@ Terse command-style prompts produce shallow, generic work.
       return;
     }
 
+    // FR-9 (stub scope): point the in-place nav controller at the selected agent
+    // so its transcript also becomes the in-view session (number-jump parity).
+    {
+      const navIdx = manager.orderedAgents().find(e => e.record.id === record.id)?.index;
+      if (navIdx != null) navController.jumpToIndex(navIdx);
+    }
     const { ConversationViewer, VIEWPORT_HEIGHT_PCT } = await import("./ui/conversation-viewer.js");
     const session = record.session;
     const activity = agentActivity.get(record.id);
