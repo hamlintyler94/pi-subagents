@@ -44,8 +44,26 @@ import {
 } from "./session-row-format.js";
 import type { Theme } from "./theme.js";
 
-/** Result a terminal-input handler may return (mirrors core TerminalInputHandler). */
-export type TerminalInputResult = { consume?: boolean; data?: string } | undefined;
+/**
+ * Result a terminal-input handler may return.
+ *
+ * IMPORTANT contract note: the core extension API documents `{ consume: true }`
+ * (TerminalInputHandler), but interactive mode registers the handler DIRECTLY as a
+ * pi-tui `InputListener` (interactive-mode.js: `onTerminalInput → addInputListener`,
+ * no translation), and pi-tui's `notifyInputListeners` only checks `result?.handled`
+ * to stop propagation to the editor. `tui.js` contains zero `consume` references.
+ * So returning `consume` ALONE does not actually suppress the editor — the nav key
+ * would also reach the editor (double-processing). We therefore return all three
+ * fields together (`consume` for the documented core contract, `handled` +
+ * `preventDefault` for the real pi-tui InputListener contract) so suppression works
+ * regardless of which layer reads the result. Verified against the live build.
+ */
+export type TerminalInputResult =
+  | { consume?: boolean; handled?: boolean; preventDefault?: boolean; data?: string; transformedData?: string }
+  | undefined;
+
+/** Build a "swallow this key" result that satisfies BOTH the core and pi-tui contracts. */
+const CONSUME: TerminalInputResult = { consume: true, handled: true, preventDefault: true };
 
 /**
  * UI surface the controller needs — a structural subset of the core
@@ -222,7 +240,7 @@ export class SessionNavController {
         this.state = res.state;
         this.applyEffect(res.effect);
         this.refresh();
-        return { consume: true };
+        return CONSUME;
       }
     }
 
@@ -242,7 +260,7 @@ export class SessionNavController {
     this.state = res.state;
     this.applyEffect(res.effect);
     this.refresh();
-    return res.consume ? { consume: true } : undefined;
+    return res.consume ? CONSUME : undefined;
   }
 
   private applyEffect(effect: NavEffect): void {
