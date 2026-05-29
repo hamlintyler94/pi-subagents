@@ -38,8 +38,9 @@ an interactive terminal (keypress rendering and visual sign-off).
 All 11 §8.3 items are driven through the **built `dist/` modules** with the **real pi-tui
 `visibleWidth`** measurement and a realistic captured `ctx.ui`, feeding the actual arrow / Enter /
 digit / Esc byte sequences (`\x1b[A`, `\x1b[B`, `\r`, `\x1b`, `"0"`…) the live `onTerminalInput`
-receives. Run `npm run verify:s83` (or `node scripts/verify-s83.mjs`). **Result: 24 pass, 0 fail
-(exit 0).** This goes well beyond the unit tests, which use a hand-rolled fake theme/ctx; the
+receives. Run `npm run verify:s83` (or `node scripts/verify-s83.mjs`). **Result: 26 pass, 0 fail
+(exit 0)** — the 24 §8.3 assertions plus 2 regression assertions for the live-found overlay bug
+(BUG-A). This goes well beyond the unit tests, which use a hand-rolled fake theme/ctx; the
 harness uses the real width engine and the real compiled controller + formatters.
 
 | §8.3 item | Check id | Verified |
@@ -61,13 +62,39 @@ are in fact deterministic width facts: the harness measures rendered-line cell w
 `visibleWidth` the TUI uses, so font-overhang collision (#10) and row overflow (#11) are decided
 mechanically, not visually.
 
-### Only genuinely human-gated item
+### Live-found bugs (from Tyler's interactive testing) — fixed + regression-locked
 
-The single thing a headless run cannot reproduce is a **human looking at the actual painted pixels**
-on Tyler's specific terminal emulator + font (e.g. confirming the ambiguous-width `⟳` glyph renders
-as expected by *that* font's glyph table). The logic, byte-paths, and cell-width math are all proven
-above; this is a cosmetic spot-check, not a correctness gate. The build is linked live (`npm link`),
-so it is a 10-second look: run `pi`, spawn 2–3 subagents, glance at the list.
+1. **Arrows hijacked while an ask-user-question overlay was open.** The global
+   `onTerminalInput` consumed ↑/↓/digits for list nav even while a capturing prompt owned the
+   screen. Fix: suppress nav when a foreign overlay is up — `tui.hasOverlay()` true while our own
+   (nonCapturing) transcript pane is not shown ⇒ a foreign prompt ⇒ pass every key through; nav
+   resumes when it closes. Regression: harness `BUG-A overlay-passthrough` + `BUG-A
+   resume-after-close`.
+2. **Selecting a subagent hid the list with no way back to main.** The transcript pane was
+   anchored `bottom-center`, floating over the `belowEditor` list. Fix: re-anchor `top-center`
+   (maxHeight 60%) so the pane fills the area above the editor and the editor + list stay visible;
+   plus the breadcrumb now carries an always-visible way-back hint
+   (`▸ Name (n) · Esc or 0 → main`). Regression: `formatBreadcrumb` unit + `#8 FR-3` harness check.
+
+### Why a real-keystroke live run is not possible in this environment
+
+A true interactive keypress test needs a pseudo-terminal, and that is **environmentally
+unavailable here** — not skipped:
+
+- **`node-pty` cannot build** — it is a native addon requiring an MSVC toolchain; this machine has
+  none (`where cl` → not found, `npm install node-pty` → exit 1), and Node v25 has no published
+  prebuilt binaries. There is no pure-JS Windows ConPTY alternative.
+- **RPC mode (`pi --mode rpc`) carries no keystroke injection** — its command set
+  (`rpc-types.d.ts`) has `prompt`/`steer`/`bash`/… and surfaces `setWidget`/`setStatus` as events,
+  but **no terminal-input command**. `onTerminalInput` and `custom()` overlays are interactive-TUI
+  only, so RPC cannot drive the nav either.
+
+Everything reachable without a TTY is done: the extension **loads in live interactive-adjacent pi**
+(`pi --offline -p` → RC=0, no error — exercises real `index.ts` init / controller construction /
+`pi.on("input")` registration), all live-API seams are verified against the real `.d.ts`, and the
+real compiled controller is driven byte-for-byte by the harness (26/26). The only residual is a
+human's visual glance at glyph rendering on a specific font — cosmetic, not a correctness gate. The
+build is linked live (`npm link`), so that glance is a 10-second look once `pi` is restarted.
 
 ---
 
