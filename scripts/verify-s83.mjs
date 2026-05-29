@@ -64,7 +64,7 @@ function makeManager(records) {
 function makeCtx(columns) {
   // overlayActive is toggleable to simulate a foreign capturing overlay (ask-user-question).
   const state = { widgetLines: [], status: {}, editorText: "", inputHandler: null, paneFactoryCalled: false, consumedKeys: [], overlayActive: false };
-  const fakeTui = { terminal: { columns }, requestRender() {}, isOverlayActive: () => state.overlayActive };
+  const fakeTui = { terminal: { columns }, requestRender() {}, hasOverlay: () => state.overlayActive };
   const ctx = {
     setStatus(key, text) { state.status[key] = text; },
     setWidget(_key, factory) {

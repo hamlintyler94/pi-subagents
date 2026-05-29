@@ -189,18 +189,21 @@ export class SessionNavController {
   }
 
   /**
-   * Is a FOREIGN focus-capturing overlay currently up (e.g. an ask-user-question
-   * prompt, a select menu)? Such overlays own the keyboard until dismissed, so we
-   * must NOT steal their arrows/Enter/digits — the user navigates the prompt first
-   * and only falls through to the session list once the prompt is gone. Our own
-   * transcript pane is mounted `nonCapturing`, so it does not make
-   * `isOverlayActive()` true; only capturing overlays do. Confirmed against pi-tui:
-   * `hasActiveOverlay() => overlays.some(o => o.options?.nonCapturing !== true)`, i.e.
-   * nonCapturing overlays (our pane) are excluded. If the host predates this API the
-   * optional call is undefined → we assume no foreign overlay (prior behavior).
+   * Is a FOREIGN overlay up (e.g. an ask-user-question prompt, a select menu)?
+   * Such overlays own the keyboard until dismissed, so we must NOT steal their
+   * arrows/Enter/digits — the prompt handles them, and nav resumes once it closes.
+   *
+   * pi-tui only exposes `hasOverlay()` (any visible overlay), which also counts our
+   * OWN transcript pane (a nonCapturing overlay). So `hasOverlay()` alone would wrongly
+   * suppress nav whenever a subagent is being viewed. We disambiguate with `this.pane`:
+   * if an overlay is up while our pane is NOT shown, it must be a foreign one →
+   * suppress. (Known limitation: a foreign prompt opening *while* the transcript pane
+   * is also up is not distinguished — acceptable; subagent prompts don't surface in the
+   * parent TUI. If the host predates `hasOverlay`, the optional call is undefined →
+   * assume no foreign overlay, i.e. prior behavior.)
    */
   private foreignOverlayActive(): boolean {
-    return this.tui?.isOverlayActive?.() === true;
+    return this.tui?.hasOverlay?.() === true && this.pane == null;
   }
 
   /** Raw terminal input handler (runs before the editor). */
