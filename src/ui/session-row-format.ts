@@ -184,9 +184,13 @@ export function formatPaneHeader(m: PaneHeaderModel, theme: Theme): string {
   return `${glyph} ${head}${tail}`;
 }
 
-/** Breadcrumb text for setStatus (spec §3.3 / FR-3): "▸ Explore (2)" or "▸ main(0)". */
+/**
+ * Breadcrumb text for setStatus (spec §3.3 / FR-3): "▸ main(0)" when main is in
+ * view, or "▸ Explore (2) · Esc or 0 → main" when a subagent is in view. The trailing
+ * hint gives the user an always-visible way back to main (Esc resets; 0 number-jumps).
+ */
 export function formatBreadcrumb(name: string, index: number, isMain: boolean): string {
-  return isMain ? `▸ main(0)` : `▸ ${name} (${index})`;
+  return isMain ? `▸ main(0)` : `▸ ${name} (${index}) · Esc or 0 → main`;
 }
 
 /**

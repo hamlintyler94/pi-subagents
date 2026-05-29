@@ -62,8 +62,9 @@ function makeManager(records) {
 
 // ---- Captured ctx.ui (records real factory render output) -----------------------
 function makeCtx(columns) {
-  const fakeTui = { terminal: { columns }, requestRender() {} };
-  const state = { widgetLines: [], status: {}, editorText: "", inputHandler: null, paneFactoryCalled: false, consumedKeys: [] };
+  // overlayActive is toggleable to simulate a foreign capturing overlay (ask-user-question).
+  const state = { widgetLines: [], status: {}, editorText: "", inputHandler: null, paneFactoryCalled: false, consumedKeys: [], overlayActive: false };
+  const fakeTui = { terminal: { columns }, requestRender() {}, isOverlayActive: () => state.overlayActive };
   const ctx = {
     setStatus(key, text) { state.status[key] = text; },
     setWidget(_key, factory) {
@@ -108,6 +109,39 @@ function feed(controller, state, data) {
   // ←/→ always pass-through (FR-13)
   const rl = resolveNavKey({ state: { highlightIndex: 2, inViewIndex: 0 }, key: "left", caret: { atFirstLine: false, atLastLine: false, isEmpty: false }, listLength: 3 });
   check("#1 FR-13", rl.consume === false && rl.effect.kind === "passToEditor", "←/→ always pass to editor");
+}
+
+// ================================================================================
+// BUG A — while a foreign capturing overlay (ask-user-question) is up, our nav must
+// NOT consume arrows/digits: they belong to that overlay until it closes.
+// ================================================================================
+{
+  const mgr = makeManager([
+    rec("a", "Explore", "running", 1000),
+    rec("b", "Plan", "running", 1100),
+  ]);
+  const { ctx, state } = makeCtx(120);
+  state._rerender = ctx._rerender;
+  const ctrl = new SessionNavController(mgr, new Map(), () => undefined);
+  ctrl.setUICtx(ctx);
+  ctrl.refresh();
+  // Drop focus into the list first so nav WOULD normally consume ↓.
+  feed(ctrl, state, KEY.down); // → main(0)
+  const hBefore = ctrl.getState().highlightIndex;
+  // Now a foreign capturing overlay opens (e.g. ask-user-question).
+  state.overlayActive = true;
+  const retDown = state.inputHandler(KEY.down); // should pass through (undefined), no nav
+  const retDigit = state.inputHandler("2");      // digit should also pass through
+  const hAfter = ctrl.getState().highlightIndex;
+  check("BUG-A overlay-passthrough",
+    retDown === undefined && retDigit === undefined && hAfter === hBefore,
+    `overlay up → ↓ ret=${JSON.stringify(retDown)}, digit ret=${JSON.stringify(retDigit)}, highlight unchanged (${hBefore}→${hAfter})`);
+  // Once the overlay closes, nav resumes.
+  state.overlayActive = false;
+  const retResume = state.inputHandler(KEY.down);
+  check("BUG-A resume-after-close",
+    retResume && retResume.consume === true && ctrl.getState().highlightIndex === hBefore + 1,
+    `overlay closed → ↓ resumes nav (highlight ${hBefore}→${ctrl.getState().highlightIndex})`);
 }
 
 // ================================================================================
@@ -224,7 +258,7 @@ function feed(controller, state, data) {
 // §8.3 #8 / FR-3 / FR-10 — breadcrumb tracks in-view; Esc → main + editor
 // ================================================================================
 {
-  check("#8 FR-3", formatBreadcrumb("Explore", 2, false) === "▸ Explore (2)" && formatBreadcrumb("main", 0, true) === "▸ main(0)",
+  check("#8 FR-3", formatBreadcrumb("Explore", 2, false) === "▸ Explore (2) · Esc or 0 → main" && formatBreadcrumb("main", 0, true) === "▸ main(0)",
     `breadcrumb: "${formatBreadcrumb("Explore", 2, false)}" / "${formatBreadcrumb("main", 0, true)}"`);
   const esc = resolveNavKey({ state: { highlightIndex: 3, inViewIndex: 3 }, key: "escape", caret: { atFirstLine: false, atLastLine: false, isEmpty: false }, listLength: 4 });
   check("#8 FR-10", esc.consume && esc.state.highlightIndex === EDITOR && esc.state.inViewIndex === 0 && esc.effect.kind === "reset",

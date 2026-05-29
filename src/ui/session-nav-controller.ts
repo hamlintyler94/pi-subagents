@@ -16,7 +16,7 @@
  */
 
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
-import type { Component, OverlayOptions, TUI } from "@earendil-works/pi-tui";
+import { type Component, type OverlayOptions, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
 import type { AgentRecord } from "../types.js";
 import { getLifetimeTotal, getSessionContextPercent } from "../usage.js";
 import {
@@ -188,9 +188,28 @@ export class SessionNavController {
     }
   }
 
+  /**
+   * Is a FOREIGN focus-capturing overlay currently up (e.g. an ask-user-question
+   * prompt, a select menu)? Such overlays own the keyboard until dismissed, so we
+   * must NOT steal their arrows/Enter/digits — the user navigates the prompt first
+   * and only falls through to the session list once the prompt is gone. Our own
+   * transcript pane is mounted `nonCapturing`, so it does not make
+   * `isOverlayActive()` true; only capturing overlays do. Confirmed against pi-tui:
+   * `hasActiveOverlay() => overlays.some(o => o.options?.nonCapturing !== true)`, i.e.
+   * nonCapturing overlays (our pane) are excluded. If the host predates this API the
+   * optional call is undefined → we assume no foreign overlay (prior behavior).
+   */
+  private foreignOverlayActive(): boolean {
+    return this.tui?.isOverlayActive?.() === true;
+  }
+
   /** Raw terminal input handler (runs before the editor). */
   private onInput(data: string): TerminalInputResult {
     if (!this.ui) return undefined;
+
+    // A capturing overlay (ask-user-question, select menu, modal) owns the keyboard
+    // — let every key pass straight through to it; resume nav only once it closes.
+    if (this.foreignOverlayActive()) return undefined;
 
     // Number-key jump (0-9) only when focus is in the list (highlight >= 0).
     if (this.state.highlightIndex >= 0 && data.length === 1 && data >= "0" && data <= "9") {
@@ -298,15 +317,16 @@ export class SessionNavController {
       },
       {
         overlay: true,
-        // Anchor at the bottom edge so the pane fills the chat region directly above
-        // the real input box (spec §3.1 — seamless, NOT a centered popover).
-        // "bottom-center" is a valid OverlayAnchor (verified against pi-tui's
-        // OverlayAnchor union). nonCapturing keeps keystrokes flowing to the editor (FR-13).
+        // Anchor at the TOP so the pane fills the chat region ABOVE the editor and
+        // leaves the editor + the belowEditor session list visible (spec §3.1 layout:
+        // pane → editor → list). A bottom anchor floated the pane OVER the belowEditor
+        // list, hiding it and removing the user's way back to main — keep it top.
+        // nonCapturing keeps keystrokes flowing to the editor + our nav handler (FR-13).
         overlayOptions: {
           nonCapturing: true,
-          anchor: "bottom-center",
+          anchor: "top-center",
           width: "100%",
-          maxHeight: "70%",
+          maxHeight: "60%",
         },
       },
     ).then(() => {
