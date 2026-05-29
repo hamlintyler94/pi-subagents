@@ -129,7 +129,10 @@ function harness(recs) {
 // a subagent is in view (hasOverlay() true but foreignOverlayActive() stays false).
 // ================================================================================
 {
-  const { term, tui, ctrl } = harness([rec("b", "Plan", "running", 1100, { session: {} })]);
+  // A minimal AgentSession stub the real TranscriptPane can hold: subscribe() returns
+  // an unsubscribe fn, getMessages() returns the transcript array.
+  const fakeSession = { subscribe: () => () => {}, getMessages: () => [], steer: async () => {} };
+  const { term, tui, ctrl } = harness([rec("b", "Plan", "running", 1100, { session: fakeSession })]);
   term.type(KEY.down); // → main(0)
   term.type(KEY.down); // → Plan(1)
   term.type(KEY.enter); // view Plan → mounts real nonCapturing overlay

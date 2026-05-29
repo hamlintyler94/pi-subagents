@@ -142,11 +142,11 @@ function feed(controller, state, data) {
   check("BUG-A resume-after-close",
     retResume && retResume.consume === true && ctrl.getState().highlightIndex === hBefore + 1,
     `overlay closed → ↓ resumes nav (highlight ${hBefore}→${ctrl.getState().highlightIndex})`);
-  // BUG-C: a consumed nav key MUST also set handled+preventDefault, because pi-tui's
-  // notifyInputListeners only stops editor propagation on result.handled (not .consume).
-  check("BUG-C consume-sets-handled",
-    retResume && retResume.handled === true && retResume.preventDefault === true,
-    `consume result carries handled+preventDefault for real pi-tui InputListener (got ${JSON.stringify(retResume)})`);
+  // BUG-C: a consumed nav key returns exactly { consume: true } — the field pi-tui's
+  // handleInput checks (`if (result?.consume) return;`) to stop the key reaching the editor.
+  check("BUG-C consume-contract",
+    retResume && retResume.consume === true,
+    `consume result is { consume: true } per pi-tui handleInput (got ${JSON.stringify(retResume)})`);
 }
 
 // ================================================================================
