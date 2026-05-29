@@ -45,25 +45,21 @@ import {
 import type { Theme } from "./theme.js";
 
 /**
- * Result a terminal-input handler may return.
+ * Result a terminal-input handler may return (mirrors core `TerminalInputHandler`).
  *
- * IMPORTANT contract note: the core extension API documents `{ consume: true }`
- * (TerminalInputHandler), but interactive mode registers the handler DIRECTLY as a
- * pi-tui `InputListener` (interactive-mode.js: `onTerminalInput → addInputListener`,
- * no translation), and pi-tui's `notifyInputListeners` only checks `result?.handled`
- * to stop propagation to the editor. `tui.js` contains zero `consume` references.
- * So returning `consume` ALONE does not actually suppress the editor — the nav key
- * would also reach the editor (double-processing). We therefore return all three
- * fields together (`consume` for the documented core contract, `handled` +
- * `preventDefault` for the real pi-tui InputListener contract) so suppression works
- * regardless of which layer reads the result. Verified against the live build.
+ * Suppression contract (verified against the live build, `tui.js:handleInput`):
+ *   for (const listener of this.inputListeners) {
+ *     const result = listener(data);
+ *     if (result?.consume) return;   // ← only `consume` stops propagation to the editor
+ *   }
+ * pi-tui's `InputListenerResult` is `{ consume?: boolean; data?: string }` and interactive
+ * mode registers our handler directly as that listener. So `{ consume: true }` is exactly
+ * right and IS honored — returning it stops the nav key from also reaching the editor.
  */
-export type TerminalInputResult =
-  | { consume?: boolean; handled?: boolean; preventDefault?: boolean; data?: string; transformedData?: string }
-  | undefined;
+export type TerminalInputResult = { consume?: boolean; data?: string } | undefined;
 
-/** Build a "swallow this key" result that satisfies BOTH the core and pi-tui contracts. */
-const CONSUME: TerminalInputResult = { consume: true, handled: true, preventDefault: true };
+/** A "swallow this key" result — `consume` is the field pi-tui's handleInput checks. */
+const CONSUME: TerminalInputResult = { consume: true };
 
 /**
  * UI surface the controller needs — a structural subset of the core

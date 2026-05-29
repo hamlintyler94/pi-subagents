@@ -36,6 +36,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:s83": "node scripts/verify-s83.mjs",
+    "verify:realtui": "node scripts/verify-realtui.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src/ test/",
     "lint:fix": "biome check --fix src/ test/"
