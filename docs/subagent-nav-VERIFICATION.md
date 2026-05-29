@@ -5,9 +5,8 @@
 **Runtime target:** `@earendil-works/pi-coding-agent@0.75.5` (peer deps already match)
 
 This report records the automated verification completed headlessly, the **live-Pi link and
-load verification that WAS performed**, a real bug that live verification caught and fixed, and
-the residual items that physically require a human at an interactive terminal (keypress rendering
-and visual sign-off).
+load verification that WAS performed**, and the residual items that physically require a human at
+an interactive terminal (keypress rendering and visual sign-off).
 
 ---
 
@@ -28,12 +27,11 @@ and visual sign-off).
    - `ctx.ui.custom<T>(factory, { overlay?, overlayOptions? })` — matches `showPane`. ✅
    - `OverlayOptions` (pi-tui) carries `nonCapturing`, `anchor`, `width`, `maxHeight`. ✅
    - `ctx.hasUI: boolean` — matches the interactive-only guard. ✅
-4. **Bug caught & fixed by live verification (3)**: `OverlayAnchor` has **no `"bottom-center"`**
-   (valid: `center|top|bottom|top-left|top-right|bottom-left|bottom-right|left|right`). The pane
-   used `anchor:"bottom-center"`, which the TUI falls back to centered → a *popover*, violating
-   §3.1/FR-3. Fixed to `anchor:"bottom"` so the non-capturing overlay fills the chat region above
-   the real input box. The fake-ctx integration tests ignore `overlayOptions`, so only live-API
-   inspection surfaced it.
+   - `OverlayAnchor` valid values (verified against pi-tui `tui.d.ts:59`):
+     `center | top-left | top-right | bottom-left | bottom-right | top-center | bottom-center |
+     left-center | right-center`. The pane uses `anchor:"bottom-center"` — **valid** — so the
+     non-capturing overlay anchors to the bottom edge above the real input box (§3.1/FR-3,
+     seamless pane not a centered popover). ✅
 
 ### Residual — physically requires an interactive terminal (true environmental limit)
 
