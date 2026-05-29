@@ -1,0 +1,29 @@
+=== §8.3 live-rendering verification (real pi-tui visibleWidth, built dist/ modules) ===
+
+PASS  #1/#2 FR-2  ↓ mid-text → passToEditor, stays in editor (consume=false)
+PASS  #1 FR-13  ←/→ always pass to editor
+PASS  #2 FR-1a  ↓ from empty editor → highlight main(0) (idx=0)
+PASS  #2 FR-1b  ↑ from main(0) → editor (focusEditorEnd)
+PASS  #3 FR-6a  ↓ walks list in order: 1,2,3
+FAIL  #3 FR-6b  row1=Explore(completed) present & first by spawn order; 4 rows incl. main
+PASS  #4 FR-3a  Enter on Plan → in-view = b (b)
+PASS  #4 FR-3b  transcript pane mounted via custom() (factory called=true)
+PASS  #4 FR-3c  0/main → pane hidden (in-view=undefined)
+PASS  #4 FR-7  pane header has model+ctx%+activity: "● in-view: Plan (1) · 4.2s · model: sonnet · ctx 31% · 12.3k tok · searching…"
+PASS  #5 FR-4  running in-view: routeInput→"handled", steer buffered=["steer this please"]
+PASS  #6 FR-5  finished in-view: routeInput→"handled", hint="[Agent (1) · ✓ finished]  input disabled — Enter on main(0) to chat"
+PASS  #7 FR-9a  digit 2 → in-view 2
+PASS  #7 FR-9b  digit 0 → main
+PASS  #7 FR-9c  out-of-range digit → no-op (consume=false)
+PASS  #8 FR-3  breadcrumb: "▸ Explore (2)" / "▸ main(0)"
+PASS  #8 FR-10  Esc → in-view main + highlight editor
+PASS  #9 FR-11a  finished-while-away 'a' is badged (attentionSet has a=true)
+PASS  #9 FR-11b-row  finished row present (idx=1)
+PASS  #9 FR-11b  viewing 'a' clears its badge (has(a)=false)
+PASS  #10 FR-12  glyph form "⟳ 5" / "⟳ 5≤30"; stringWidth("⟳ ")=2 (separator guarantees no digit overlap)
+FAIL  #11 cols=20  4 rows; 3 exceed 20 cols → [21:"  ● main(0) ◀ in view" | 41:"  ✓ Agent(1) ● · 0.8s · haiku · 13.3k tok" | 47:"  ● Agent(2) · 1780048690.7s (running) · sonnet"]
+FAIL  #11 cols=40  4 rows; 2 exceed 40 cols → [41:"  ✓ Agent(1) ● · 0.8s · haiku · 13.3k tok" | 47:"  ● Agent(2) · 1780048690.7s (running) · sonnet"]
+PASS  #11 cols=80  4 rows; 0 exceed 80 cols
+
+TOTAL: 21 pass, 3 fail
+CHECKS: 24

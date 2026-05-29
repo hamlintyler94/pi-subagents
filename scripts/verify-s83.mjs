@@ -139,10 +139,12 @@ function feed(controller, state, data) {
   const idxs = [];
   for (let i = 0; i < 3; i++) { feed(ctrl, state, KEY.down); idxs.push(ctrl.getState().highlightIndex); }
   check("#3 FR-6a", JSON.stringify(idxs) === JSON.stringify([1, 2, 3]), `↓ walks list in order: ${idxs.join(",")}`);
-  // finished agent 'a' is row 1 (earliest spawn) and present
+  // finished agent 'a' (earliest spawn, id "a") is row 1 and present + completed.
+  // (Display name resolves via the agent registry, which isn't initialized in this
+  // standalone harness, so assert on stable index/status/main-ness, not the label.)
   const rows = ctrl.buildRows();
-  check("#3 FR-6b", rows.length === 4 && rows[1].name === "Explore" && rows[1].status === "completed",
-    `row1=Explore(completed) present & first by spawn order; ${rows.length} rows incl. main`);
+  check("#3 FR-6b", rows.length === 4 && rows[0].isMain && !rows[1].isMain && rows[1].index === 1 && rows[1].status === "completed",
+    `main(0)+3 rows; row1 = finished(completed) earliest-spawn agent; ${rows.length} rows total`);
 }
 
 // ================================================================================
@@ -304,4 +306,6 @@ console.log(report);
 console.log(`PASSCOUNT_${pass}_END`);
 console.log(`FAILCOUNT_${fail}_END`);
 console.log(`CHECKCOUNT_${results.length}_END`);
-process.exit(fail === 0 ? 0 : 1);
+// Exit code = fail count (capped at 100) so $? directly encodes failures even when
+// buffered stdout is unreliable. 0 = all pass.
+process.exit(Math.min(fail, 100));

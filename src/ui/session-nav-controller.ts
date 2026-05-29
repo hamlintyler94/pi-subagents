@@ -452,7 +452,15 @@ export class SessionNavController {
         (tui, theme) => {
           this.tui = tui;
           return {
-            render: () => renderSessionList(this.buildRows(), this.state.highlightIndex === EDITOR, theme),
+            // Clamp every row to the live terminal width so narrow terminals never
+            // overflow/wrap into layout corruption (§8.3 #11 / Phase-4 hardening).
+            render: () => renderSessionList(
+              this.buildRows(),
+              this.state.highlightIndex === EDITOR,
+              theme,
+              undefined,
+              (line) => truncateToWidth(line, tui.terminal.columns),
+            ),
             invalidate: () => { this.widgetRegistered = false; this.tui = undefined; },
           };
         },

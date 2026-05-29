@@ -200,16 +200,23 @@ export function formatBreadcrumb(name: string, index: number, isMain: boolean): 
  * `editorHighlighted` adds a leading `(editor)` cursor row so the highlight is visible
  * even when focus is in the editor (FR-8 visual distinction in plain captures).
  * Returns themed lines. `header` is an optional leading title line.
+ *
+ * `truncate` is an optional width-clamp applied to every composed line so rows never
+ * overflow a narrow terminal (§8.3 #11). The caller injects pi-tui's `truncateToWidth`
+ * bound to the current column count; keeping it a param leaves this module TUI-free and
+ * unit-testable. When omitted, lines are returned untruncated.
  */
 export function renderSessionList(
   rows: RowModel[],
   editorHighlighted: boolean,
   theme: Theme,
   header?: string,
+  truncate?: (line: string) => string,
 ): string[] {
+  const clamp = truncate ?? ((l: string) => l);
   const lines: string[] = [];
-  if (header) lines.push(header);
-  lines.push(formatEditorCursorRow(editorHighlighted, theme));
-  for (const r of rows) lines.push(formatSessionRow(r, theme));
+  if (header) lines.push(clamp(header));
+  lines.push(clamp(formatEditorCursorRow(editorHighlighted, theme)));
+  for (const r of rows) lines.push(clamp(formatSessionRow(r, theme)));
   return lines;
 }

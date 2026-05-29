@@ -38,3 +38,4 @@ coverage/
 progress.md
 AGENTS.md
 CLAUDE.md
+scripts/verify-s83.out.txt
